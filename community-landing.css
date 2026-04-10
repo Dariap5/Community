@@ -73,8 +73,14 @@ nav#siteNav .nav-cta{
 }
 .nav-brand-mark{
   display:flex;align-items:center;justify-content:center;width:22px;height:22px;
-  font-size:15px;font-weight:600;line-height:1;
+  flex-shrink:0;
 }
+.nav-logo-img{
+  width:22px;height:22px;object-fit:contain;display:block;
+}
+.nav-logo-img--dark{display:none}
+nav#siteNav.is-scrolled .nav-logo-img--light{display:none}
+nav#siteNav.is-scrolled .nav-logo-img--dark{display:block}
 .nav-links{
   position:absolute;left:50%;transform:translateX(-50%);
   display:flex;align-items:center;gap:clamp(16px,2.6vw,32px);
@@ -503,7 +509,8 @@ body.modal-open{overflow:hidden;touch-action:none}
   nav#siteNav.is-scrolled{padding:10px 16px}
   nav#siteNav .nav-links{display:none!important}
   .nav-brand{font-size:15px;gap:8px}
-  .nav-brand-mark{width:20px;height:20px;font-size:14px}
+  .nav-brand-mark{width:20px;height:20px}
+  .nav-logo-img{width:20px;height:20px}
   .nav-cta{padding:10px 18px;font-size:13px;border-radius:999px}
   .hero{
     justify-content:center;
