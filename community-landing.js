@@ -962,7 +962,10 @@
           headers,
           body: JSON.stringify(payload),
         });
-        if (!res.ok) throw new Error("notify");
+        const ct = (res.headers.get("content-type") || "").toLowerCase();
+        if (!res.ok || !ct.includes("application/json")) throw new Error("notify");
+        const json = await res.json().catch(() => null);
+        if (!json || json.ok !== true) throw new Error("notify");
         sent = true;
       }
 
