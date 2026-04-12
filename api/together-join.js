@@ -2,16 +2,15 @@
  * Vercel Serverless Function: принимает JSON с лендинга и шлёт сообщение в Telegram.
  *
  * Переменные окружения в Vercel (Settings → Environment Variables):
- *   TELEGRAM_BOT_TOKEN  — токен от @BotFather
- *   TELEGRAM_CHAT_ID    — куда слать (ваш user id или id группы)
+ *   BOT_TOKEN или TELEGRAM_BOT_TOKEN — токен от @BotFather
+ *   TELEGRAM_CHAT_ID — куда слать (ваш user id или id группы)
  *   TOGETHER_WEBHOOK_SECRET — опционально; тогда в community-landing.js задайте тот же JOIN_NOTIFY_SECRET
  */
 
-function escapeHtml(s) {
-  return String(s || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+function nextApplicationNumber() {
+  const t = Date.now();
+  const r = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `${t}-${r}`;
 }
 
 export default async function handler(req, res) {
@@ -37,10 +36,10 @@ export default async function handler(req, res) {
     }
   }
 
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const token = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) {
-    return res.status(500).json({ error: "Server missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID" });
+    return res.status(500).json({ error: "Server missing BOT_TOKEN (or TELEGRAM_BOT_TOKEN) or TELEGRAM_CHAT_ID" });
   }
 
   let body = req.body;
@@ -55,21 +54,31 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Invalid body" });
   }
 
-  const first = escapeHtml(body.firstName);
-  const last = escapeHtml(body.lastName);
-  const phone = escapeHtml(body.phone);
-  const tg = escapeHtml(String(body.telegram || "").replace(/^@+/, ""));
+  const first = String(body.firstName || "").trim();
+  const last = String(body.lastName || "").trim();
+  const phone = String(body.phone || "").trim();
+  const tg = String(body.telegram || "")
+    .replace(/^@+/, "")
+    .trim();
+  const calendlySlot = String(body.calendlySlot || "").trim();
 
   if (!first || !last || !phone || !tg) {
     return res.status(400).json({ error: "Missing fields" });
   }
+  if (!calendlySlot) {
+    return res.status(400).json({ error: "Missing calendlySlot" });
+  }
+
+  const applicationNumber = nextApplicationNumber();
 
   const text = [
-    "<b>Новая заявка Together</b>",
+    `Заявка #${applicationNumber}`,
     "",
-    `Имя: ${first} ${last}`,
-    `Телефон: ${phone}`,
-    `Telegram: @${tg}`,
+    `Имя: ${first}`,
+    `Фамилия: ${last}`,
+    `Номер телефона: ${phone}`,
+    `Телеграм: @${tg}`,
+    `Запись в Calendly: ${calendlySlot}`,
   ].join("\n");
 
   const tgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -78,7 +87,6 @@ export default async function handler(req, res) {
     body: JSON.stringify({
       chat_id: chatId,
       text,
-      parse_mode: "HTML",
       disable_web_page_preview: true,
     }),
   });
@@ -88,5 +96,5 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: "Telegram API error", details: tgJson });
   }
 
-  return res.status(200).json({ ok: true });
+  return res.status(200).json({ ok: true, applicationNumber });
 }

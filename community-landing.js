@@ -725,6 +725,7 @@
   /**
    * URL бэкенда, который пересылает заявку в Telegram (см. api/together-join.js и TELEGRAM_SETUP.md).
    * Пример: https://ваш-проект.vercel.app/api/together-join
+   * Если оставить пустым, при открытии сайта по http(s) будет использован тот же домен + /api/together-join (типичный деплой на Vercel).
    */
   const JOIN_NOTIFY_URL = "";
   /** Тот же секрет, что TOGETHER_WEBHOOK_SECRET на сервере (опционально) */
@@ -742,6 +743,56 @@
   if (!modal || !form || !successEl || !errorEl) return;
 
   let calendlyReady = false;
+  /** Дата/время созвона после подтверждения записи в виджете Calendly (postMessage). */
+  let calendlyBookedSlot = "";
+
+  function joinNotifyUrl() {
+    if (JOIN_NOTIFY_URL) return JOIN_NOTIFY_URL;
+    if (typeof window === "undefined") return "";
+    const p = window.location.protocol;
+    if (p !== "http:" && p !== "https:") return "";
+    return new URL("/api/together-join", window.location.origin).href;
+  }
+
+  function formatCalendlySlotRu(iso) {
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return String(iso);
+      return new Intl.DateTimeFormat("ru-RU", {
+        dateStyle: "long",
+        timeStyle: "short",
+        timeZone: "Europe/Moscow",
+      }).format(d);
+    } catch {
+      return String(iso);
+    }
+  }
+
+  function isCalendlyMessage(e) {
+    return (
+      e.origin === "https://calendly.com" &&
+      e.data &&
+      typeof e.data === "object" &&
+      typeof e.data.event === "string" &&
+      e.data.event.indexOf("calendly.") === 0
+    );
+  }
+
+  window.addEventListener("message", (e) => {
+    if (!isCalendlyMessage(e)) return;
+    const { event: calEv, payload } = e.data;
+    const start =
+      (payload && payload.event && payload.event.start_time) ||
+      (payload && payload.scheduled_event && payload.scheduled_event.start_time) ||
+      (payload && payload.invitee && payload.invitee.start_time);
+    if (start) {
+      calendlyBookedSlot = formatCalendlySlotRu(start);
+      return;
+    }
+    if (calEv === "calendly.event_scheduled") {
+      calendlyBookedSlot = "запись подтверждена в Calendly (время не передано виджетом — проверьте встречу в календаре)";
+    }
+  });
 
   function closeModal() {
     modal.classList.remove("is-open");
@@ -752,6 +803,7 @@
     errorEl.hidden = true;
     form.reset();
     calendlyReady = false;
+    calendlyBookedSlot = "";
     if (calEl) calEl.innerHTML = "";
   }
 
@@ -878,24 +930,33 @@
 
     fd.set("telegram", tg);
 
+    if (!calendlyBookedSlot) {
+      errorEl.textContent =
+        "Сначала завершите запись на созвон в календаре Calendly выше (выберите время и подтвердите запись).";
+      errorEl.hidden = false;
+      return;
+    }
+
     const payload = {
       firstName: first,
       lastName: last,
       phone,
       telegram: tg,
+      calendlySlot: calendlyBookedSlot,
       source: "together-landing",
     };
 
     try {
       let sent = false;
+      const notifyTarget = joinNotifyUrl();
 
-      if (JOIN_NOTIFY_URL) {
+      if (notifyTarget) {
         const headers = {
           "Content-Type": "application/json",
           Accept: "application/json",
         };
         if (JOIN_NOTIFY_SECRET) headers.Authorization = "Bearer " + JOIN_NOTIFY_SECRET;
-        const res = await fetch(JOIN_NOTIFY_URL, {
+        const res = await fetch(notifyTarget, {
           method: "POST",
           headers,
           body: JSON.stringify(payload),
@@ -916,7 +977,7 @@
 
       if (!sent && typeof console !== "undefined" && console.warn) {
         console.warn(
-          "[Together] Заявка не ушла на сервер: задайте JOIN_NOTIFY_URL (Telegram) или JOIN_FORM_ENDPOINT в community-landing.js. См. TELEGRAM_SETUP.md"
+          "[Together] Заявка не ушла на сервер: откройте сайт по http(s) с API на том же домене, либо задайте JOIN_NOTIFY_URL или JOIN_FORM_ENDPOINT в community-landing.js. См. TELEGRAM_SETUP.md"
         );
       }
 
