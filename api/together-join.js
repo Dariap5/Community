@@ -82,17 +82,28 @@ export default async function handler(req, res) {
     `Запись в Calendly: ${calendlySlot}`,
   ].join("\n");
 
-  const tgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      disable_web_page_preview: true,
-    }),
-  });
+  let tgRes;
+  let tgJson;
+  try {
+    tgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        disable_web_page_preview: true,
+      }),
+    });
+    tgJson = await tgRes.json().catch(() => ({}));
+  } catch (err) {
+    const code = err && err.cause && err.cause.code;
+    console.error("[together-join] Telegram fetch failed:", code || err.message || err);
+    return res.status(503).json({
+      error: "Telegram unreachable",
+      code: code || undefined,
+    });
+  }
 
-  const tgJson = await tgRes.json().catch(() => ({}));
   if (!tgRes.ok || !tgJson.ok) {
     return res.status(502).json({ error: "Telegram API error", details: tgJson });
   }

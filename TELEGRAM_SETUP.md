@@ -91,7 +91,9 @@ const JOIN_NOTIFY_SECRET = ""; // или тот же секрет, что в TOG
    sudo systemctl status together-api
    ```
 
-5. Проверка с сервера:
+5. Если в браузере **502** на `POST …/api/together-join`: чаще всего это не «сломался nginx», а ответ API при **ошибке Telegram** (неверный токен, неверный `chat_id`, бот не запущен в личке через `/start`). Проверьте шаг 6 и логи `journalctl -u together-api -n 50`.
+
+6. Проверка с сервера:
    ```bash
    curl -sS -X POST "https://dariyap.ru/api/together-join" \
      -H "Content-Type: application/json" \
@@ -100,6 +102,21 @@ const JOIN_NOTIFY_SECRET = ""; // или тот же секрет, что в TOG
    Ожидается JSON с `"ok":true`.
 
 В `community-landing.js` для этого сценария: **`JOIN_NOTIFY_URL = ""`**.
+
+## Таймаут до `api.telegram.org` (в логах `UND_ERR_CONNECT_TIMEOUT`, `Connect Timeout Error`)
+
+Процесс Node **должен** уметь открыть исходящее HTTPS-соединение к хостам Telegram (в логах часто видны `149.154.x.x` и/или IPv6 `2001:67c:4e8:…`).
+
+1. С самого VPS проверьте, что соединение вообще устанавливается (не обязательно 200 OK):
+   ```bash
+   curl -4 -I --max-time 15 https://api.telegram.org/
+   ```
+   Если здесь таймаут — проблема **сети/файрвола у хостера**, а не токена бота. Часто режут исходящий трафик в сторону Telegram; тогда имеет смысл вынести `api/together-join` на **Vercel** или другой хост с нормальным выходом в интернет.
+2. Если **IPv4** отвечает, а **IPv6** «висит», заставьте Node сначала пробовать IPv4. В **`/etc/systemd/system/together-api.service`** в секции `[Service]` добавьте строку:
+   ```ini
+   Environment=NODE_OPTIONS=--dns-result-order=ipv4first
+   ```
+   Затем: `sudo systemctl daemon-reload && sudo systemctl restart together-api`.
 
 ## Альтернативы Vercel
 

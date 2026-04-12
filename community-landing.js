@@ -968,6 +968,25 @@
       source: "together-landing",
     };
 
+    function joinNotifyErrorText(res, json) {
+      if (res.status === 401) {
+        return "Запрос к серверу отклонён (несовпадение секрета). Обновите страницу или свяжитесь с администратором.";
+      }
+      if (res.status === 500 && json && String(json.error || "").includes("Server missing")) {
+        return "На сервере не настроены переменные Telegram (токен или chat id). См. TELEGRAM_SETUP.md.";
+      }
+      if (res.status === 503 && json && json.error === "Telegram unreachable") {
+        return "С сервера не удаётся связаться с Telegram (таймаут или блокировка сети). Проверьте исходящий HTTPS до api.telegram.org и настройки файрвола; см. TELEGRAM_SETUP.md.";
+      }
+      if (res.status === 502) {
+        if (json && json.error === "Telegram API error") {
+          return "Заявка дошла до сервера, но Telegram не принял сообщение: проверьте TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID и что вы написали боту /start в личку.";
+        }
+        return "Сервер ответил с ошибкой (502). Подождите минуту и попробуйте снова или напишите нам в Telegram.";
+      }
+      return "";
+    }
+
     try {
       let sent = false;
       const notifyTarget = joinNotifyUrl();
@@ -984,8 +1003,18 @@
           body: JSON.stringify(payload),
         });
         const ct = (res.headers.get("content-type") || "").toLowerCase();
-        if (!res.ok || !ct.includes("application/json")) throw new Error("notify");
-        const json = await res.json().catch(() => null);
+        const json = ct.includes("application/json")
+          ? await res.json().catch(() => null)
+          : null;
+        if (!res.ok) {
+          const specific = joinNotifyErrorText(res, json);
+          if (specific) {
+            errorEl.textContent = specific;
+            errorEl.hidden = false;
+            return;
+          }
+          throw new Error("notify");
+        }
         if (!json || json.ok !== true) throw new Error("notify");
         sent = true;
       }
