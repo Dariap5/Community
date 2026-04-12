@@ -979,10 +979,16 @@
         sent = true;
       }
 
-      if (!sent && typeof console !== "undefined" && console.warn) {
-        console.warn(
-          "[Together] Заявка не ушла на сервер: откройте сайт по http(s) с API на том же домене, либо задайте JOIN_NOTIFY_URL или JOIN_FORM_ENDPOINT в community-landing.js. См. TELEGRAM_SETUP.md"
-        );
+      if (!sent) {
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn(
+            "[Together] Заявка не ушла на сервер: задайте JOIN_NOTIFY_URL или JOIN_FORM_ENDPOINT в community-landing.js (см. TELEGRAM_SETUP.md)."
+          );
+        }
+        errorEl.textContent =
+          "Заявка не отправлена: не настроен адрес сервера (JOIN_NOTIFY_URL). Обновите страницу после публикации сайта или напишите в Telegram.";
+        errorEl.hidden = false;
+        return;
       }
 
       form.hidden = true;
