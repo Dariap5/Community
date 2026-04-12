@@ -39,6 +39,8 @@ const JOIN_NOTIFY_URL = "";
 const JOIN_NOTIFY_SECRET = ""; // или тот же секрет, что в TOGETHER_WEBHOOK_SECRET
 ```
 
+В **`index.html`** задан `<meta name="together-api-origin" content="https://dariyap.ru">`: если `window.location` не даёт обычный `https:` (встроенный браузер, предпросмотр), заявка всё равно уйдёт на этот хост + `/api/together-join`. Смените `content`, если основной домен другой.
+
 ## Проверка бота
 
 - Напишите боту **/start** в личку (если шлёте в личку) — иначе иногда первое сообщение от бота может не дойти до «разрешённого» чата.

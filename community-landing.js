@@ -746,12 +746,34 @@
   /** Дата/время созвона после подтверждения записи в виджете Calendly (postMessage). */
   let calendlyBookedSlot = "";
 
+  function readMetaApiOrigin() {
+    try {
+      const el = document.querySelector('meta[name="together-api-origin"]');
+      const v = (el && el.getAttribute("content") || "").trim();
+      if (!v) return "";
+      return new URL(v).origin;
+    } catch {
+      return "";
+    }
+  }
+
   function joinNotifyUrl() {
     if (JOIN_NOTIFY_URL) return JOIN_NOTIFY_URL;
     if (typeof window === "undefined") return "";
-    const p = window.location.protocol;
-    if (p !== "http:" && p !== "https:") return "";
-    return new URL("/api/together-join", window.location.origin).href;
+    let origin = "";
+    try {
+      const p = window.location.protocol;
+      if (p === "http:" || p === "https:") origin = new URL(window.location.href).origin;
+    } catch {
+      origin = "";
+    }
+    if (!origin) origin = readMetaApiOrigin();
+    if (!origin) return "";
+    try {
+      return new URL("/api/together-join", origin).href;
+    } catch {
+      return "";
+    }
   }
 
   function formatCalendlySlotRu(iso) {
@@ -985,7 +1007,7 @@
           );
         }
         errorEl.textContent =
-          "Заявка не отправлена: не настроен адрес сервера (JOIN_NOTIFY_URL). Обновите страницу после публикации сайта или напишите в Telegram.";
+          "Заявка не отправлена: браузер не смог определить адрес API. Обновите страницу (Ctrl+F5), откройте сайт по https://dariyap.ru или проверьте meta together-api-origin в HTML.";
         errorEl.hidden = false;
         return;
       }
