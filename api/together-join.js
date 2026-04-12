@@ -1,10 +1,11 @@
 /**
- * Vercel Serverless Function: принимает JSON с лендинга и шлёт сообщение в Telegram.
+ * Принимает JSON с лендинга и шлёт сообщение в Telegram.
+ * Vercel: файл в api/ как serverless. Свой сервер: поднимаете server.js + nginx (см. TELEGRAM_SETUP.md).
  *
- * Переменные окружения в Vercel (Settings → Environment Variables):
+ * Переменные окружения:
  *   BOT_TOKEN или TELEGRAM_BOT_TOKEN — токен от @BotFather
- *   TELEGRAM_CHAT_ID — куда слать (ваш user id или id группы)
- *   TOGETHER_WEBHOOK_SECRET — опционально; тогда в community-landing.js задайте тот же JOIN_NOTIFY_SECRET
+ *   TELEGRAM_CHAT_ID — куда слать (user id или id группы)
+ *   TOGETHER_WEBHOOK_SECRET — опционально; тогда в community-landing.js тот же JOIN_NOTIFY_SECRET
  */
 
 function nextApplicationNumber() {

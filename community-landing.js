@@ -723,12 +723,11 @@
   /** Ссылка на встречу в Calendly */
   const JOIN_CALENDLY_URL = "https://calendly.com/dariapaivina/meet-with-me";
   /**
-   * URL бэкенда, который пересылает заявку в Telegram (см. api/together-join.js и TELEGRAM_SETUP.md).
-   * Пример: https://ваш-проект.vercel.app/api/together-join
-   * Если оставить пустым, при открытии сайта по http(s) будет использован тот же домен + /api/together-join (типичный деплой на Vercel).
-   * Статика на своём сервере (dariyap.ru) → API на продакшен-домене Vercel ниже.
+   * URL бэкенда заявок (см. api/together-join.js, server.js, TELEGRAM_SETUP.md).
+   * Пустая строка: тот же домен что у страницы + /api/together-join (nginx проксирует на Node).
+   * Иначе полный URL, например отдельный Vercel.
    */
-  const JOIN_NOTIFY_URL = "https://community-three-blond.vercel.app/api/together-join";
+  const JOIN_NOTIFY_URL = "";
   /** Тот же секрет, что TOGETHER_WEBHOOK_SECRET на сервере (опционально) */
   const JOIN_NOTIFY_SECRET = "";
   /** Опционально: дубликат на Formspree — https://formspree.io/f/xxxx */
