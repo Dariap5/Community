@@ -726,8 +726,9 @@
    * URL бэкенда, который пересылает заявку в Telegram (см. api/together-join.js и TELEGRAM_SETUP.md).
    * Пример: https://ваш-проект.vercel.app/api/together-join
    * Если оставить пустым, при открытии сайта по http(s) будет использован тот же домен + /api/together-join (типичный деплой на Vercel).
+   * Статика на своём сервере (dariyap.ru) → API на продакшен-домене Vercel ниже.
    */
-  const JOIN_NOTIFY_URL = "";
+  const JOIN_NOTIFY_URL = "https://community-three-blond.vercel.app/api/together-join";
   /** Тот же секрет, что TOGETHER_WEBHOOK_SECRET на сервере (опционально) */
   const JOIN_NOTIFY_SECRET = "";
   /** Опционально: дубликат на Formspree — https://formspree.io/f/xxxx */
