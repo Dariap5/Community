@@ -77,25 +77,11 @@ const JOIN_NOTIFY_SECRET = ""; // или тот же секрет, что в TOG
    ```
    Затем: `sudo nginx -t && sudo systemctl reload nginx`
 
-4. Запуск API через **systemd** (чтобы поднималось после перезагрузки), файл `/etc/systemd/system/together-api.service`:
-   ```ini
-   [Unit]
-   Description=Together landing API
-   After=network.target
-
-   [Service]
-   Type=simple
-   User=www-data
-   WorkingDirectory=/var/www/Community
-   EnvironmentFile=/var/www/Community/.env
-   ExecStart=/usr/bin/node /var/www/Community/server.js
-   Restart=on-failure
-   RestartSec=5
-
-   [Install]
-   WantedBy=multi-user.target
+4. Запуск API через **systemd**. В репозитории есть шаблон **`deploy/together-api.service`** — скопируйте его в systemd (или создайте тот же файл вручную):
+   ```bash
+   sudo cp /var/www/Community/deploy/together-api.service /etc/systemd/system/together-api.service
    ```
-   Установите Node 20+ (`node -v`). Путь к `node` при необходимости замените на вывод `which node`.  
+   Установите Node 20+ (`node -v`). Если `node` не в `/usr/bin/node`, выполните `which node` и отредактируйте строку `ExecStart=` в `/etc/systemd/system/together-api.service`.
    Команды:
    ```bash
    sudo systemctl daemon-reload
