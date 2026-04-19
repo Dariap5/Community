@@ -175,7 +175,7 @@
     function setActive(idx) {
         cards.forEach((c) => c.classList.remove("is-active"));
         if (idx !== null) cards[idx].classList.add("is-active");
-        current = idx ?? current;
+        current = idx !== null && idx !== undefined ? idx : current;
     }
 
     function cycle() {
@@ -835,7 +835,10 @@
         modal.setAttribute("aria-hidden", "false");
         document.body.classList.add("modal-open");
         loadCalendlyWidget();
-        requestAnimationFrame(() => document.getElementById("joinFirstName")?.focus());
+        requestAnimationFrame(() => {
+            const firstNameInput = document.getElementById("joinFirstName");
+            if (firstNameInput) firstNameInput.focus();
+        });
     }
 
     function loadCalendlyWidget() {
