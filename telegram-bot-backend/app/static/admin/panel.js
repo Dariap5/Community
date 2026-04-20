@@ -1,9 +1,18 @@
 const state = {
     currentStepId: null,
+    currentStep: null,
     settingsMap: {},
     dragMessageId: null,
     dragButtonId: null,
 };
+
+function setStepEditorStatus(text, isError = false) {
+    const el = document.getElementById("stepEditorStatus");
+    if (!el) return;
+    el.textContent = text || "";
+    el.classList.toggle("text-red-700", isError);
+    el.classList.toggle("text-slate-600", !isError);
+}
 
 async function api(path, options = {}) {
     const response = await fetch(path, {
@@ -112,43 +121,87 @@ async function loadFunnels() {
 async function loadStep() {
     const stepId = Number(document.getElementById("stepIdInput").value || "0");
     if (!stepId) return;
-    state.currentStepId = stepId;
+    try {
+        const step = await api(`/admin/api/steps/${stepId}`);
+        state.currentStepId = stepId;
+        state.currentStep = step;
 
-    const messagesData = await api(`/admin/api/steps/${stepId}/messages`);
-    const messagesRoot = document.getElementById("messagesList");
-    messagesRoot.innerHTML = messagesData.items
-        .map(
-            (m) => `
+        const metaEl = document.getElementById("loadedStepMeta");
+        if (metaEl) {
+            metaEl.textContent = `Загружен шаг #${step.id} (воронка ${step.funnel_id}, порядок ${step.step_order}, key: ${step.step_key || "-"})`;
+        }
+
+        const enabledToggle = document.getElementById("stepEnabledToggle");
+        if (enabledToggle) {
+            enabledToggle.checked = Boolean(step.is_enabled);
+        }
+
+        const messagesData = await api(`/admin/api/steps/${stepId}/messages`);
+        const messagesRoot = document.getElementById("messagesList");
+        const messageTypes = ["text", "photo", "document", "video", "video_note", "voice"];
+        const parseModes = ["HTML", "Markdown"];
+
+        messagesRoot.innerHTML = messagesData.items
+            .map(
+                (m) => `
       <div class="border rounded-lg p-2 text-sm" draggable="true" data-message-id="${m.id}">
-        <div class="font-medium">#${m.message_order} ${m.message_type}</div>
-        <textarea class="w-full mt-1 border rounded p-1 msg-text" data-id="${m.id}">${m.content_text || ""}</textarea>
-        <div class="grid grid-cols-3 gap-2 mt-1">
+        <div class="font-medium">#${m.message_order} 
+          <select class="msg-type border rounded p-1" data-id="${m.id}">
+            ${messageTypes.map(t => `<option ${t === m.message_type ? 'selected' : ''}>${t}</option>`).join('')}
+          </select>
+        </div>
+        <textarea class="w-full mt-1 border rounded p-1 msg-text" data-id="${m.id}" placeholder="Текст сообщения">${m.content_text || ""}</textarea>
+        <div class="grid grid-cols-4 gap-2 mt-1">
           <input class="border rounded p-1 msg-file" data-id="${m.id}" value="${m.content_file || ""}" placeholder="file id" />
-          <input class="border rounded p-1 msg-delay" data-id="${m.id}" value="${m.delay_after_seconds}" placeholder="delay sec" />
-          <button class="msg-del border rounded text-red-700" data-id="${m.id}">Удалить</button>
+          <input class="border rounded p-1 msg-caption" data-id="${m.id}" value="${m.caption || ""}" placeholder="caption" />
+          <select class="border rounded p-1 msg-parse" data-id="${m.id}">
+            ${parseModes.map(p => `<option ${p === m.parse_mode ? 'selected' : ''}>${p}</option>`).join('')}
+          </select>
+          <div class="grid grid-cols-2 gap-1">
+            <input class="border rounded p-1 msg-delay" data-id="${m.id}" value="${m.delay_after_seconds}" type="number" min="0" placeholder="delay" />
+            <button class="msg-del border rounded text-red-700 text-xs">Del</button>
+          </div>
         </div>
       </div>`,
-        )
-        .join("");
+            )
+            .join("");
 
-    const buttonsData = await api(`/admin/api/steps/${stepId}/buttons`);
-    const buttonsRoot = document.getElementById("buttonsList");
-    buttonsRoot.innerHTML = buttonsData.items
-        .map(
-            (b) => `
+        if (!messagesData.items.length) {
+            messagesRoot.innerHTML = '<div class="text-xs text-slate-500">Субсообщений пока нет. Нажмите "Добавить".</div>';
+        }
+
+        const buttonsData = await api(`/admin/api/steps/${stepId}/buttons`);
+        const buttonsRoot = document.getElementById("buttonsList");
+        const buttonTypes = ["url", "callback", "payment"];
+        
+        buttonsRoot.innerHTML = buttonsData.items
+            .map(
+                (b) => `
       <div class="border rounded-lg p-2 text-sm" draggable="true" data-button-id="${b.id}">
-        <input class="w-full border rounded p-1 btn-text" data-id="${b.id}" value="${b.text}" />
+        <input class="w-full border rounded p-1 btn-text" data-id="${b.id}" value="${b.text}" placeholder="Текст кнопки" />
         <div class="grid grid-cols-3 gap-2 mt-1">
-          <input class="border rounded p-1 btn-type" data-id="${b.id}" value="${b.button_type}" />
-          <input class="border rounded p-1 btn-value" data-id="${b.id}" value="${b.value}" />
-          <button class="btn-del border rounded text-red-700" data-id="${b.id}">Удалить</button>
+          <select class="border rounded p-1 btn-type" data-id="${b.id}">
+            ${buttonTypes.map(t => `<option ${t === b.button_type ? 'selected' : ''}>${t}</option>`).join('')}
+          </select>
+          <input class="border rounded p-1 btn-value" data-id="${b.id}" value="${b.value}" placeholder="URL/callback" />
+          <button class="btn-del border rounded text-red-700 text-xs">Del</button>
         </div>
       </div>`,
-        )
-        .join("");
+            )
+            .join("");
 
-    bindStepAutosave();
-    bindDnDReorder();
+        if (!buttonsData.items.length) {
+            buttonsRoot.innerHTML = '<div class="text-xs text-slate-500">Кнопок пока нет. Нажмите "Добавить".</div>';
+        }
+
+        setStepEditorStatus(`Шаг ${stepId} загружен`);
+
+        bindStepAutosave();
+        bindDnDReorder();
+    } catch (error) {
+        setStepEditorStatus(`Ошибка загрузки шага: ${String(error.message || error)}`, true);
+        alert(`Не удалось загрузить шаг: ${String(error.message || error)}`);
+    }
 }
 
 function bindDnDReorder() {
@@ -198,28 +251,45 @@ function bindDnDReorder() {
 }
 
 function bindStepAutosave() {
-    document.querySelectorAll(".msg-text, .msg-file, .msg-delay").forEach((el) => {
+    // Message text, file, caption, delay, parse mode, type auto-save
+    document.querySelectorAll(".msg-text, .msg-file, .msg-delay, .msg-caption, .msg-parse, .msg-type").forEach((el) => {
         el.addEventListener("blur", async() => {
             const id = Number(el.dataset.id);
             const box = el.closest("[data-message-id]");
             const text = box.querySelector(".msg-text").value;
             const file = box.querySelector(".msg-file").value;
             const delay = Number(box.querySelector(".msg-delay").value || "0");
-            await api(`/admin/api/messages/${id}`, {
-                method: "PATCH",
-                body: JSON.stringify({ content_text: text, content_file: file, delay_after_seconds: delay }),
-            });
+            const caption = box.querySelector(".msg-caption").value;
+            const parse_mode = box.querySelector(".msg-parse").value;
+            const message_type = box.querySelector(".msg-type").value;
+            
+            try {
+                await api(`/admin/api/messages/${id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ 
+                        content_text: text, 
+                        content_file: file, 
+                        delay_after_seconds: delay,
+                        caption: caption,
+                        parse_mode: parse_mode,
+                        message_type: message_type,
+                    }),
+                });
+            } catch (error) {
+                setStepEditorStatus(`Ошибка сохранения: ${String(error.message || error)}`, true);
+            }
         });
     });
 
     document.querySelectorAll(".msg-del").forEach((el) => {
         el.addEventListener("click", async() => {
             if (!confirm("Удалить субсообщение?")) return;
-            await api(`/admin/api/messages/${Number(el.dataset.id)}`, { method: "DELETE" });
+            await api(`/admin/api/messages/${Number(el.closest("[data-message-id]").dataset.messageId)}`, { method: "DELETE" });
             await loadStep();
         });
     });
 
+    // Button fields auto-save
     document.querySelectorAll(".btn-text, .btn-type, .btn-value").forEach((el) => {
         el.addEventListener("blur", async() => {
             const id = Number(el.dataset.id);
@@ -227,17 +297,21 @@ function bindStepAutosave() {
             const text = box.querySelector(".btn-text").value;
             const button_type = box.querySelector(".btn-type").value;
             const value = box.querySelector(".btn-value").value;
-            await api(`/admin/api/buttons/${id}`, {
-                method: "PATCH",
-                body: JSON.stringify({ text, button_type, value }),
-            });
+            try {
+                await api(`/admin/api/buttons/${id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ text, button_type, value }),
+                });
+            } catch (error) {
+                setStepEditorStatus(`Ошибка сохранения кнопки: ${String(error.message || error)}`, true);
+            }
         });
     });
 
     document.querySelectorAll(".btn-del").forEach((el) => {
         el.addEventListener("click", async() => {
             if (!confirm("Удалить кнопку?")) return;
-            await api(`/admin/api/buttons/${Number(el.dataset.id)}`, { method: "DELETE" });
+            await api(`/admin/api/buttons/${Number(el.closest("[data-button-id]").dataset.buttonId)}`, { method: "DELETE" });
             await loadStep();
         });
     });
@@ -469,6 +543,53 @@ function bindGlobalActions() {
 
   document.getElementById("loadStepBtn").addEventListener("click", loadStep);
 
+  document.getElementById("createStepBtn").addEventListener("click", async () => {
+    const funnelId = Number(document.getElementById("newStepFunnelId").value || "0");
+    const stepOrder = Number(document.getElementById("newStepOrder").value || "1");
+    const stepKey = document.getElementById("newStepKey").value.trim() || null;
+    if (!funnelId) {
+      setStepEditorStatus("Укажите funnel_id для создания шага", true);
+      return;
+    }
+
+    try {
+      const created = await api("/admin/api/steps", {
+        method: "POST",
+        body: JSON.stringify({
+          funnel_id: funnelId,
+          step_order: stepOrder,
+          step_key: stepKey,
+          is_enabled: true,
+          delay_unit: "seconds",
+          delay_before_seconds: 0,
+          trigger_conditions: {},
+        }),
+      });
+      document.getElementById("stepIdInput").value = String(created.id);
+      setStepEditorStatus(`Шаг создан: ID ${created.id}`);
+      await loadStep();
+    } catch (error) {
+      setStepEditorStatus(`Ошибка создания шага: ${String(error.message || error)}`, true);
+    }
+  });
+
+  document.getElementById("saveStepStateBtn").addEventListener("click", async () => {
+    if (!state.currentStepId) {
+      setStepEditorStatus("Сначала загрузите шаг", true);
+      return;
+    }
+    const isEnabled = document.getElementById("stepEnabledToggle").checked;
+    try {
+      await api(`/admin/api/steps/${state.currentStepId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_enabled: isEnabled }),
+      });
+      setStepEditorStatus(`Статус шага сохранен: ${isEnabled ? "активен" : "выключен"}`);
+    } catch (error) {
+      setStepEditorStatus(`Ошибка сохранения статуса шага: ${String(error.message || error)}`, true);
+    }
+  });
+
   document.getElementById("newMessageBtn").addEventListener("click", async () => {
     if (!state.currentStepId) return alert("Сначала загрузите шаг");
     await api("/admin/api/messages", {
@@ -489,8 +610,14 @@ function bindGlobalActions() {
 
   document.getElementById("sendStepTestBtn").addEventListener("click", async () => {
     if (!state.currentStepId) return alert("Сначала загрузите шаг");
-    await api(`/admin/api/steps/${state.currentStepId}/send-test`, { method: "POST" });
-    alert("Тест-отправка выполнена");
+    try {
+      await api(`/admin/api/steps/${state.currentStepId}/send-test`, { method: "POST" });
+      setStepEditorStatus("Тест-отправка выполнена (сообщение отправлено вам в Telegram)");
+      alert("Тест-отправка выполнена! Проверьте Telegram - сообщение должно содержать все кнопки точно как в боте.");
+    } catch (error) {
+      setStepEditorStatus(`Тест-отправка не выполнена: ${String(error.message || error)}`, true);
+      alert(`Ошибка тест-отправки: ${String(error.message || error)}`);
+    }
   });
 
   document.getElementById("newProductBtn").addEventListener("click", async () => {
@@ -550,10 +677,34 @@ function bindGlobalActions() {
     window.location.href = "/admin/login";
   });
 
+  // HTML editor with Telegram-compatible preview
   const htmlEditor = document.getElementById("htmlEditor");
-  htmlEditor.addEventListener("input", () => {
-    document.getElementById("htmlPreview").innerHTML = htmlEditor.value;
-  });
+  const htmlPreview = document.getElementById("htmlPreview");
+  
+  function updatePreview() {
+    const html = htmlEditor.value;
+    // Sanitize to Telegram-supported tags only
+    const sanitized = html
+      .replace(/<[^/][^>]*>/g, (tag) => {
+        const allowed = ["<b>", "<i>", "<u>", "<s>", "<a ", "<code>", "<blockquote>", "<em>", "<strong>"];
+        return allowed.some(t => tag.startsWith(t)) ? tag : "";
+      })
+      .replace(/<\/[^>]*>/g, (tag) => {
+        const allowed = ["</b>", "</i>", "</u>", "</s>", "</a>", "</code>", "</blockquote>", "</em>", "</strong>"];
+        return allowed.includes(tag) ? tag : "";
+      });
+    
+    htmlPreview.innerHTML = sanitized || "<em class='text-slate-400'>Пусто</em>";
+    
+    if (sanitized !== html) {
+      htmlPreview.className = "min-h-40 border-2 border-yellow-400 rounded-lg p-3 bg-yellow-50";
+      htmlPreview.innerHTML += '<div class="text-xs text-yellow-700 mt-2">⚠️ Некоторые теги удалены - Telegram не их поддерживает. Поддержка: &lt;b&gt;, &lt;i&gt;, &lt;u&gt;, &lt;s&gt;, &lt;a&gt;, &lt;code&gt;, &lt;blockquote&gt;</div>';
+    } else {
+      htmlPreview.className = "min-h-40 border rounded-lg p-3 bg-slate-50";
+    }
+  }
+  
+  htmlEditor.addEventListener("input", updatePreview);
 
   document.getElementById("themeToggle").addEventListener("click", () => {
     document.body.classList.toggle("bg-slate-900");

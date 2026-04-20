@@ -45,12 +45,27 @@
 
             <section id="tab-stepEditor" class="tab-panel hidden bg-white rounded-2xl shadow p-4 md:p-6 space-y-4">
                 <h2 class="text-xl font-semibold">Раздел 2 — Редактор шага</h2>
+                <div class="grid md:grid-cols-4 gap-2">
+                    <input id="newStepFunnelId" class="border rounded-lg px-3 py-2" placeholder="funnel_id" />
+                    <input id="newStepOrder" class="border rounded-lg px-3 py-2" placeholder="step_order" value="1" />
+                    <input id="newStepKey" class="border rounded-lg px-3 py-2" placeholder="step_key (например A1)" />
+                    <button id="createStepBtn" class="px-3 py-2 rounded-lg border text-sm">Создать шаг</button>
+                </div>
                 <div class="grid md:grid-cols-2 gap-4">
                     <label class="text-sm font-medium">ID шага для редактирования
               <input id="stepIdInput" class="mt-1 w-full border rounded-lg px-3 py-2" placeholder="Например: 1" />
             </label>
                     <button id="loadStepBtn" class="h-fit self-end px-3 py-2 rounded-lg bg-slate-900 text-white text-sm">Загрузить шаг</button>
                 </div>
+                <div class="flex flex-wrap items-center gap-3 text-sm">
+                    <div id="loadedStepMeta" class="text-slate-600">Шаг не загружен</div>
+                    <label class="inline-flex items-center gap-2">
+              <input id="stepEnabledToggle" type="checkbox" />
+              Активен
+            </label>
+                    <button id="saveStepStateBtn" class="px-2 py-1 rounded border text-xs">Сохранить статус шага</button>
+                </div>
+                <div id="stepEditorStatus" class="text-xs text-slate-600"></div>
 
                 <div class="grid lg:grid-cols-2 gap-4">
                     <div class="border rounded-xl p-3">

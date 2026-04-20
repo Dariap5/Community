@@ -5,6 +5,7 @@ import io
 from datetime import datetime, timezone
 
 from aiogram import Bot
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -19,6 +20,7 @@ from app.db.models import (
     Broadcast,
     BroadcastRecipient,
     ButtonClickStat,
+    ButtonType,
     Funnel,
     FunnelStep,
     PaymentStatus,
@@ -294,8 +296,13 @@ async def step_create(
     session: AsyncSession = Depends(get_db_session),
 ) -> dict:
     _assert_admin(request)
+    funnel_id = int(payload["funnel_id"])
+    funnel_result = await session.execute(select(Funnel).where(Funnel.id == funnel_id))
+    if funnel_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Funnel not found")
+
     step = FunnelStep(
-        funnel_id=int(payload["funnel_id"]),
+        funnel_id=funnel_id,
         step_order=int(payload.get("step_order", 1)),
         step_key=payload.get("step_key"),
         internal_name=payload.get("internal_name"),
@@ -308,6 +315,31 @@ async def step_create(
     await session.commit()
     await session.refresh(step)
     return {"id": step.id}
+
+
+@router.get("/api/steps/{step_id}")
+async def step_get(
+    request: Request,
+    step_id: int,
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    _assert_admin(request)
+    result = await session.execute(select(FunnelStep).where(FunnelStep.id == step_id))
+    step = result.scalar_one_or_none()
+    if step is None:
+        raise HTTPException(status_code=404, detail="Step not found")
+
+    return {
+        "id": step.id,
+        "funnel_id": step.funnel_id,
+        "step_order": step.step_order,
+        "step_key": step.step_key,
+        "internal_name": step.internal_name,
+        "is_enabled": step.is_enabled,
+        "delay_unit": step.delay_unit,
+        "delay_before_seconds": step.delay_before_seconds,
+        "trigger_conditions": step.trigger_conditions,
+    }
 
 
 @router.patch("/api/steps/{step_id}")
@@ -379,6 +411,10 @@ async def messages_list(
     session: AsyncSession = Depends(get_db_session),
 ) -> dict:
     _assert_admin(request)
+    step_result = await session.execute(select(FunnelStep.id).where(FunnelStep.id == step_id))
+    if step_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Step not found")
+
     result = await session.execute(
         select(StepMessage).where(StepMessage.step_id == step_id).order_by(StepMessage.message_order.asc())
     )
@@ -407,16 +443,26 @@ async def message_create(
     session: AsyncSession = Depends(get_db_session),
 ) -> dict:
     _assert_admin(request)
+    step_id = int(payload["step_id"])
+    step_result = await session.execute(select(FunnelStep.id).where(FunnelStep.id == step_id))
+    if step_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Step not found")
+
+    # Validate inputs
+    message_type = _validate_message_type(payload.get("message_type", "text"))
+    parse_mode = _validate_parse_mode(payload.get("parse_mode", "HTML"))
+    delay_seconds = _validate_delay_seconds(int(payload.get("delay_after_seconds", 0)))
+
     message = StepMessage(
-        step_id=int(payload["step_id"]),
+        step_id=step_id,
         message_order=int(payload.get("message_order", 1)),
-        message_type=payload.get("message_type", "text"),
+        message_type=message_type,
         content_text=payload.get("content_text"),
         content_file=payload.get("content_file"),
         caption=payload.get("caption"),
-        parse_mode=payload.get("parse_mode", "HTML"),
+        parse_mode=parse_mode,
         target_buttons_anchor=payload.get("target_buttons_anchor"),
-        delay_after_seconds=int(payload.get("delay_after_seconds", 0)),
+        delay_after_seconds=delay_seconds,
     )
     session.add(message)
     await session.commit()
@@ -436,6 +482,15 @@ async def message_update(
     message = result.scalar_one_or_none()
     if message is None:
         raise HTTPException(status_code=404, detail="Message not found")
+
+    # Validate specific fields if they're being updated
+    if "message_type" in payload:
+        payload["message_type"] = _validate_message_type(payload["message_type"])
+    if "parse_mode" in payload:
+        payload["parse_mode"] = _validate_parse_mode(payload["parse_mode"])
+    if "delay_after_seconds" in payload:
+        payload["delay_after_seconds"] = _validate_delay_seconds(int(payload["delay_after_seconds"]))
+
     for field in [
         "message_order",
         "message_type",
@@ -475,6 +530,10 @@ async def buttons_list(
     session: AsyncSession = Depends(get_db_session),
 ) -> dict:
     _assert_admin(request)
+    step_result = await session.execute(select(FunnelStep.id).where(FunnelStep.id == step_id))
+    if step_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Step not found")
+
     result = await session.execute(
         select(StepButton).where(StepButton.step_id == step_id).order_by(StepButton.button_order.asc(), StepButton.id.asc())
     )
@@ -501,8 +560,13 @@ async def button_create(
     session: AsyncSession = Depends(get_db_session),
 ) -> dict:
     _assert_admin(request)
+    step_id = int(payload["step_id"])
+    step_result = await session.execute(select(FunnelStep.id).where(FunnelStep.id == step_id))
+    if step_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Step not found")
+
     button = StepButton(
-        step_id=int(payload["step_id"]),
+        step_id=step_id,
         button_order=int(payload.get("button_order", 999)),
         text=str(payload.get("text", "Кнопка")),
         button_type=payload.get("button_type", "url"),
@@ -592,29 +656,79 @@ async def send_test_step(
     session: AsyncSession = Depends(get_db_session),
 ) -> dict:
     _assert_admin(request)
+    step_result = await session.execute(select(FunnelStep).where(FunnelStep.id == step_id))
+    step = step_result.scalar_one_or_none()
+    if step is None:
+        raise HTTPException(status_code=404, detail="Step not found")
+
     admin_chat = await _setting_text(session, "admin_test_telegram_id", "")
     if not admin_chat:
         raise HTTPException(status_code=400, detail="Set admin_test_telegram_id in Settings")
 
+    # Load messages and buttons for this step
     messages_result = await session.execute(
         select(StepMessage).where(StepMessage.step_id == step_id).order_by(StepMessage.message_order.asc())
     )
     messages = list(messages_result.scalars().all())
+
+    buttons_result = await session.execute(
+        select(StepButton).where(StepButton.step_id == step_id).order_by(StepButton.button_order.asc())
+    )
+    buttons = list(buttons_result.scalars().all())
+
+    # Build keyboard once (matches production behavior)
+    keyboard = _build_test_keyboard(buttons)
+
     bot = Bot(token=settings.bot_token)
     try:
         for msg in messages:
+            parse_mode = msg.parse_mode or "HTML"
+
             if msg.message_type.value == "text":
-                await bot.send_message(chat_id=int(admin_chat), text=msg.content_text or "", parse_mode="HTML")
+                await bot.send_message(
+                    chat_id=int(admin_chat),
+                    text=msg.content_text or "",
+                    parse_mode=parse_mode,
+                    reply_markup=keyboard,
+                )
             elif msg.message_type.value == "photo" and msg.content_file:
-                await bot.send_photo(chat_id=int(admin_chat), photo=msg.content_file, caption=msg.caption)
+                await bot.send_photo(
+                    chat_id=int(admin_chat),
+                    photo=msg.content_file,
+                    caption=msg.caption or "",
+                    parse_mode=parse_mode,
+                    reply_markup=keyboard,
+                )
             elif msg.message_type.value == "document" and msg.content_file:
-                await bot.send_document(chat_id=int(admin_chat), document=msg.content_file, caption=msg.caption)
-            elif msg.message_type.value == "video_note" and msg.content_file:
-                await bot.send_video_note(chat_id=int(admin_chat), video_note=msg.content_file)
-            elif msg.message_type.value == "voice" and msg.content_file:
-                await bot.send_voice(chat_id=int(admin_chat), voice=msg.content_file, caption=msg.caption)
+                await bot.send_document(
+                    chat_id=int(admin_chat),
+                    document=msg.content_file,
+                    caption=msg.caption or "",
+                    parse_mode=parse_mode,
+                    reply_markup=keyboard,
+                )
             elif msg.message_type.value == "video" and msg.content_file:
-                await bot.send_video(chat_id=int(admin_chat), video=msg.content_file, caption=msg.caption)
+                await bot.send_video(
+                    chat_id=int(admin_chat),
+                    video=msg.content_file,
+                    caption=msg.caption or "",
+                    parse_mode=parse_mode,
+                    reply_markup=keyboard,
+                )
+            elif msg.message_type.value == "video_note" and msg.content_file:
+                # video_note doesn't support caption or reply_markup
+                await bot.send_video_note(
+                    chat_id=int(admin_chat),
+                    video_note=msg.content_file,
+                )
+            elif msg.message_type.value == "voice" and msg.content_file:
+                # voice supports caption but not reply_markup
+                await bot.send_voice(
+                    chat_id=int(admin_chat),
+                    voice=msg.content_file,
+                    caption=msg.caption or "",
+                    parse_mode=parse_mode,
+                )
     finally:
         await bot.session.close()
 
@@ -1225,6 +1339,52 @@ async def _segment_user_ids(session: AsyncSession, tags: list[str], logic: str) 
         if logic != "AND" and owned.intersection(tags):
             wanted.append(user_id)
     return wanted
+
+
+def _build_test_keyboard(buttons: list[StepButton]) -> InlineKeyboardMarkup | None:
+    """Build keyboard for test message (admin sees all buttons, no tag filtering)."""
+    active_buttons = sorted((b for b in buttons if b.is_enabled), key=lambda item: item.button_order)
+    if not active_buttons:
+        return None
+
+    row = []
+    for button in active_buttons:
+        if button.button_type == ButtonType.url:
+            row.append(InlineKeyboardButton(text=button.text, url=button.value))
+        elif button.button_type == ButtonType.callback:
+            row.append(InlineKeyboardButton(text=button.text, callback_data=button.value))
+        elif button.button_type == ButtonType.payment:
+            row.append(InlineKeyboardButton(text=button.text, callback_data=f"pay:{button.value}"))
+
+    return InlineKeyboardMarkup(inline_keyboard=[row]) if row else None
+
+
+def _validate_message_type(message_type: str) -> str:
+    """Validate message type and raise HTTPException if invalid."""
+    valid_types = {"text", "photo", "document", "video", "video_note", "voice"}
+    if message_type not in valid_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid message_type '{message_type}'. Valid types: {', '.join(sorted(valid_types))}",
+        )
+    return message_type
+
+
+def _validate_parse_mode(parse_mode: str) -> str:
+    """Validate parse mode."""
+    valid_modes = {"HTML", "Markdown", "MarkdownV2"}
+    mode = (parse_mode or "HTML").upper()
+    if mode not in valid_modes and mode != "HTML":
+        # Default to HTML if invalid
+        return "HTML"
+    return mode
+
+
+def _validate_delay_seconds(delay: int) -> int:
+    """Validate delay_after_seconds is non-negative."""
+    if delay < 0:
+        raise HTTPException(status_code=400, detail="delay_after_seconds cannot be negative")
+    return delay
 
 
 async def _setting_text(session: AsyncSession, key: str, default: str = "") -> str:
