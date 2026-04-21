@@ -2,7 +2,7 @@ import os
 
 os.environ.setdefault("POSTGRES_DSN", "postgresql+asyncpg://bot_user:bot_pass@localhost:5432/bot_db")
 os.environ.setdefault("REDIS_DSN", "redis://localhost:6379/0")
-os.environ.setdefault("SALES_BOT_TOKEN", "test-token")
+os.environ.setdefault("SALES_BOT_TOKEN", "123456:TESTTOKEN")
 
 from fastapi.testclient import TestClient
 
@@ -24,6 +24,7 @@ def test_openapi_contains_key_routes() -> None:
 
     paths = response.json()["paths"]
     expected_paths = {
+        "/admin/funnels/{funnel_id}/steps/{step_id}",
         "/health",
         "/api/funnels",
         "/api/funnels/{funnel_id}",
@@ -32,6 +33,7 @@ def test_openapi_contains_key_routes() -> None:
         "/api/funnels/{funnel_id}/steps",
         "/api/funnels/{funnel_id}/steps/{step_id}",
         "/api/funnels/{funnel_id}/steps/{step_id}/duplicate",
+        "/api/funnels/{funnel_id}/steps/{step_id}/test",
         "/api/funnels/{funnel_id}/steps/reorder",
         "/api/payments/webhook",
     }

@@ -13,7 +13,7 @@ ADMIN_PASSWORD_HASH = hashlib.sha256(ADMIN_PASSWORD.encode("utf-8")).hexdigest()
 
 os.environ.setdefault("POSTGRES_DSN", "postgresql+asyncpg://bot_user:bot_pass@localhost:5432/bot_db")
 os.environ.setdefault("REDIS_DSN", "redis://localhost:6379/0")
-os.environ.setdefault("SALES_BOT_TOKEN", "test-token")
+os.environ.setdefault("SALES_BOT_TOKEN", "123456:TESTTOKEN")
 os.environ["ADMIN_USERNAME"] = ADMIN_USERNAME
 os.environ["ADMIN_PASSWORD_HASH"] = ADMIN_PASSWORD_HASH
 

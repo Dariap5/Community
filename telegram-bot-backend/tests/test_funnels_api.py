@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from uuid import UUID, uuid4
 
+import pytest
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -320,6 +321,52 @@ def test_update_step_preserves_config_integrity(admin_client) -> None:
         assert updated["is_active"] is False
         assert updated["config"] == new_config
         assert updated["config"]["blocks"][0]["content_text"] == "Updated body"
+    finally:
+        assert admin_client.delete(f"/api/funnels/{source['id']}").status_code == 204
+
+
+def test_step_editor_page_is_served(admin_client) -> None:
+    source = _create_funnel(admin_client, name_prefix="Editor Page Funnel")
+    try:
+        created = _create_step(admin_client, source["id"], order=1, label="Editor Page Step")
+        response = admin_client.get(f"/admin/funnels/{source['id']}/steps/{created['id']}")
+        assert response.status_code == 200
+        assert "Редактор шага" in response.text
+        assert created["name"] in response.text
+    finally:
+        assert admin_client.delete(f"/api/funnels/{source['id']}").status_code == 204
+
+
+def test_step_test_route_uses_admin_setting_and_emulation_tags(admin_client, monkeypatch: pytest.MonkeyPatch) -> None:
+    source = _create_funnel(admin_client, name_prefix="Test Route Funnel")
+    try:
+        created = _create_step(admin_client, source["id"], order=1, label="Test Route Step", with_button=True)
+
+        setting_response = admin_client.post(
+            "/admin/api/settings",
+            json={"key": "admin_test_telegram_id", "value_text": "123456789"},
+        )
+        assert setting_response.status_code == 200
+
+        captured: dict[str, object] = {}
+
+        async def fake_run_test(self, admin_telegram_id, step, emulated_tags=None):
+            captured["admin_telegram_id"] = admin_telegram_id
+            captured["step_id"] = str(step.id)
+            captured["emulated_tags"] = emulated_tags
+
+        monkeypatch.setattr("app.api.routes.funnels.FunnelEngine.run_test_for_admin", fake_run_test)
+
+        response = admin_client.post(
+            f"/api/funnels/{source['id']}/steps/{created['id']}/test",
+            json={"emulation": "bought_community"},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "sent"}
+        assert captured["admin_telegram_id"] == 123456789
+        assert captured["step_id"] == created["id"]
+        assert captured["emulated_tags"] == ["купил_продукт_1", "купил_комьюнити"]
     finally:
         assert admin_client.delete(f"/api/funnels/{source['id']}").status_code == 204
 

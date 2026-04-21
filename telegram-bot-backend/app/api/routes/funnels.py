@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from typing import Literal
 from uuid import UUID
 
+from aiogram import Bot
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.admin.auth import require_admin
 from app.db.models import Funnel, FunnelCrossEntryBehavior, FunnelStep
 from app.db.session import get_db_session
@@ -20,6 +24,7 @@ from app.schemas.api import (
     StepReorder,
     StepUpdate,
 )
+from app.funnels.engine import FunnelEngine
 from app.services.funnels import (
     duplicate_funnel_with_steps,
     duplicate_step_in_funnel,
@@ -30,6 +35,7 @@ from app.services.funnels import (
     list_funnels_with_stats,
     reorder_funnel_steps,
 )
+from app.services.settings_service import SettingsService
 
 ERROR_RESPONSES = {
     400: {"model": ErrorResponse},
@@ -45,6 +51,12 @@ router = APIRouter(
     dependencies=[Depends(require_admin)],
     responses=ERROR_RESPONSES,
 )
+
+
+class TestStepRequest(BaseModel):
+    emulation: Literal["new", "bought_product_1", "bought_community"] = "new"
+
+    model_config = ConfigDict(extra="forbid")
 
 
 def _api_error(status_code: int, code: str, message: str, details: dict | None = None) -> HTTPException:
@@ -354,3 +366,44 @@ async def reorder_steps(
     await _require_funnel(session, funnel_id)
     steps = await reorder_funnel_steps(session, funnel_id, list(data.step_ids_in_order))
     return [_serialize_step(step) for step in steps]
+
+
+def _emulated_tags(emulation: str) -> list[str]:
+    if emulation == "bought_product_1":
+        return ["купил_продукт_1", "получил_гайд"]
+    if emulation == "bought_community":
+        return ["купил_продукт_1", "купил_комьюнити"]
+    return []
+
+
+@router.post("/{funnel_id}/steps/{step_id}/test")
+async def test_step(
+    funnel_id: UUID,
+    step_id: UUID,
+    data: TestStepRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    await _require_funnel(session, funnel_id)
+    step = await _require_step(session, funnel_id, step_id)
+
+    admin_telegram_id = await SettingsService.get_int(session, "admin_test_telegram_id", 0)
+    if admin_telegram_id <= 0:
+        raise _api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "bad_request",
+            "admin_test_telegram_id is not configured",
+        )
+
+    settings = get_settings()
+    bot = Bot(token=settings.bot_token)
+    try:
+        engine = FunnelEngine(bot=bot, db=session)
+        await engine.run_test_for_admin(
+            admin_telegram_id,
+            step,
+            emulated_tags=_emulated_tags(data.emulation),
+        )
+    finally:
+        await bot.session.close()
+
+    return {"status": "sent"}

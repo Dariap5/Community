@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import ValidationError
 
 from app.api.routes.admin import router as admin_router
+from app.api.routes.admin_pages import router as admin_pages_router
 from app.api.routes.funnels import router as funnels_router
 from app.api.routes.payments import router as payments_router
 from app.config import get_settings
@@ -24,6 +25,7 @@ app.add_middleware(SessionMiddleware, secret_key=settings.admin_session_secret)
 
 app.include_router(payments_router, prefix="/api")
 app.include_router(funnels_router)
+app.include_router(admin_pages_router)
 app.include_router(admin_router)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
