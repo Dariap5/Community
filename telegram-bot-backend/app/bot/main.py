@@ -1,3 +1,11 @@
+import socket
+# Форсируем IPv4 для aiohttp (внутри Docker IPv6 не маршрутизируется)
+_orig_getaddrinfo = socket.getaddrinfo
+def _force_ipv4(*args, **kwargs):
+    responses = _orig_getaddrinfo(*args, **kwargs)
+    return [r for r in responses if r[0] == socket.AF_INET]
+socket.getaddrinfo = _force_ipv4
+
 import asyncio
 
 from aiogram import Bot, Dispatcher
