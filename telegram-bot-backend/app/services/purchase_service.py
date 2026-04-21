@@ -47,7 +47,7 @@ class PurchaseService:
                 user_id=purchase.user_id,
                 task_type="payment_confirmed",
                 payload={"purchase_id": purchase.id, "paid_tag": paid_tag},
-                run_at=datetime.now(timezone.utc),
+                execute_at=datetime.now(timezone.utc),
                 status=ScheduledTaskStatus.pending,
             )
         )

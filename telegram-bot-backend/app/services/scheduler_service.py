@@ -13,9 +13,9 @@ class SchedulerService:
             select(ScheduledTask)
             .where(
                 ScheduledTask.status == ScheduledTaskStatus.pending,
-                ScheduledTask.run_at <= datetime.now(timezone.utc),
+                ScheduledTask.execute_at <= datetime.now(timezone.utc),
             )
-            .order_by(ScheduledTask.run_at.asc())
+            .order_by(ScheduledTask.execute_at.asc())
             .limit(limit)
         )
         result = await session.execute(query)
@@ -39,5 +39,5 @@ class SchedulerService:
             task.status = ScheduledTaskStatus.failed
         else:
             task.status = ScheduledTaskStatus.pending
-            task.run_at = datetime.now(timezone.utc)
+            task.execute_at = datetime.now(timezone.utc)
         await session.commit()

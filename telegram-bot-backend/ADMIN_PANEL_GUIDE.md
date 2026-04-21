@@ -190,7 +190,7 @@ delay_after_seconds = 300 → ждет 5 мин
    
 5. Если message.delay_after_seconds > 0:
    - ≤ 60 сек: await asyncio.sleep()
-   - > 60 сек: создаем ScheduledTask с run_at в будущем
+   - > 60 сек: создаем ScheduledTask с execute_at в будущем
    
 6. Переходим к следующему сообщению
 

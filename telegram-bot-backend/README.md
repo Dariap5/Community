@@ -5,10 +5,8 @@
 Отдельных таблиц для кнопок и сообщений больше нет, вся логика шага, контент и задержки лежат в `FunnelStep.config` с Pydantic валидацией. 
 
 ## Запуск
-1. `docker compose up -d postgres redis`
-2. Применение миграций схемы: `alembic upgrade head`
-3. Миграция данных (если были старые таблицы): `python scripts/migrate_to_json_config.py`
-4. Стартовое наполнение БД воронками: `python -m app.db.seed`
+1. `bash scripts/deploy.sh`
+2. Скрипт поднимает `db` и `redis`, ждёт PostgreSQL и Redis, применяет Alembic, прогоняет legacy-миграцию и seed, затем запускает `api`, `bot`, `worker` и `beat`.
 
 ## Структура
 - `app/db/models.py`: SQLAlchemy модели

@@ -52,7 +52,7 @@ class FunnelService:
                 user_id=user.id,
                 task_type="funnel_step_dispatch",
                 payload={"funnel_state_id": state.id, "step_order": 1},
-                run_at=datetime.now(timezone.utc) + timedelta(seconds=1),
+                execute_at=datetime.now(timezone.utc) + timedelta(seconds=1),
                 status=ScheduledTaskStatus.pending,
             )
         )
@@ -72,7 +72,7 @@ class FunnelService:
                 user_id=user_id,
                 task_type="start_funnel",
                 payload={"funnel_name": funnel_name},
-                run_at=datetime.now(timezone.utc) + timedelta(seconds=delay_seconds),
+                execute_at=datetime.now(timezone.utc) + timedelta(seconds=delay_seconds),
                 status=ScheduledTaskStatus.pending,
             )
         )

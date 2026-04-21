@@ -502,7 +502,7 @@ async def broadcast_send(
             user_id=user_ids[0] if user_ids else 0,
             task_type="broadcast_dispatch",
             payload={"broadcast_id": broadcast.id},
-            run_at=datetime.now(timezone.utc),
+            execute_at=datetime.now(timezone.utc),
             status=ScheduledTaskStatus.pending,
         )
     )
