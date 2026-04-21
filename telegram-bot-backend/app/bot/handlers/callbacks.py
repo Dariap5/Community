@@ -1,183 +1,81 @@
-from datetime import datetime, timedelta, timezone
+from __future__ import annotations
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import CallbackQuery
 from sqlalchemy import select
 
-from app.db.models import (
-    ButtonClickStat,
-    ButtonType,
-    CommunityTrack,
-    ScheduledTask,
-    ScheduledTaskStatus,
-    StepButton,
-    User,
-    UserActionLog,
-)
+from app.db.models import FunnelStatus, FunnelStep, User, UserFunnelState
 from app.db.session import SessionLocal
-from app.services.settings_service import SettingsService
-from app.services.tag_service import TagService
+from app.funnels.condition_checker import get_user_tags
+from app.funnels.engine import FunnelEngine
+from app.funnels.keyboard_builder import check_visibility
+from app.schemas.step_config import ButtonGroup, StepConfig
 
 router = Router(name="callbacks")
 
 
-async def _track_callback_click(session, user_id: int, callback_data: str) -> None:
-    button_result = await session.execute(
-        select(StepButton).where(
-            StepButton.button_type == ButtonType.callback,
-            StepButton.value == callback_data,
-        )
+def _parse_callback_data(callback_data: str | None) -> tuple[str, str] | None:
+    if not callback_data:
+        return None
+    parts = callback_data.split(":")
+    if len(parts) != 3 or parts[0] != "btn":
+        return None
+    return parts[1], parts[2]
+
+
+async def _resolve_current_step(session, user_id: int, step_prefix: str) -> FunnelStep | None:
+    states_result = await session.execute(
+        select(UserFunnelState).where(UserFunnelState.user_id == user_id, UserFunnelState.status == FunnelStatus.active)
     )
-    button = button_result.scalar_one_or_none()
-    if button is not None:
-        session.add(ButtonClickStat(step_button_id=button.id, user_id=user_id))
-        session.add(
-            UserActionLog(
-                user_id=user_id,
-                action_type="button_clicked",
-                funnel_step_id=button.step_id,
-                payload={"button_id": button.id, "callback": callback_data},
-            )
-        )
-        await session.commit()
+    for state in states_result.scalars().all():
+        if state.current_step_id is None:
+            continue
+        step = await session.get(FunnelStep, state.current_step_id)
+        if step is not None and step.id.hex.startswith(step_prefix):
+            return step
+    return None
 
 
-@router.callback_query(F.data == "community:join")
-async def community_join_handler(callback: CallbackQuery) -> None:
+@router.callback_query(F.data.startswith("btn:"))
+async def button_callback(callback: CallbackQuery) -> None:
     if callback.from_user is None:
+        await callback.answer()
         return
 
+    parsed = _parse_callback_data(callback.data)
+    if parsed is None:
+        await callback.answer("Некорректная кнопка", show_alert=True)
+        return
+
+    step_prefix, button_prefix = parsed
     async with SessionLocal() as session:
+        engine = FunnelEngine(bot=callback.message.bot if callback.message else None, db=session)
         user_result = await session.execute(select(User).where(User.telegram_id == callback.from_user.id))
         user = user_result.scalar_one_or_none()
         if user is None:
-            await callback.answer("Сначала используйте /start")
+            await callback.answer("Сначала используйте /start", show_alert=True)
             return
 
-        await _track_callback_click(session, user.id, "community:join")
-
-        await TagService.add_tag(session, user.id, "community_choice_made")
-        text = await SettingsService.get_text(
-            session,
-            key="community_payment_text",
-            default="Выберите формат оплаты комьюнити:",
-        )
-        payment_url = await SettingsService.get_text(
-            session,
-            key="community_payment_url",
-            default="https://example.com/community-pay",
-        )
-
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="Оплатить комьюнити", url=payment_url)]]
-        )
-        await callback.message.answer(text, parse_mode="HTML", reply_markup=keyboard)
-
-    await callback.answer()
-
-
-@router.callback_query(F.data == "community:doubt")
-async def community_doubt_handler(callback: CallbackQuery) -> None:
-    if callback.from_user is None:
-        return
-
-    async with SessionLocal() as session:
-        user_result = await session.execute(select(User).where(User.telegram_id == callback.from_user.id))
-        user = user_result.scalar_one_or_none()
-        if user is None:
-            await callback.answer("Сначала используйте /start")
+        step = await _resolve_current_step(session, user.telegram_id, step_prefix)
+        if step is None:
+            await callback.answer("Кнопка устарела", show_alert=True)
             return
 
-        await _track_callback_click(session, user.id, "community:doubt")
-
-        await TagService.add_tag(session, user.id, "community_choice_made")
-        await TagService.add_tag(session, user.id, "есть_сомнения")
-
-        calendly_url = await SettingsService.get_text(
-            session,
-            key="calendly_url",
-            default="https://calendly.com/replace-me",
-        )
-        support_text = await SettingsService.get_text(
-            session,
-            key="doubt_support_text",
-            default="Понимаем сомнения. Можно записаться на созвон:",
-        )
-
-        await callback.message.answer(
-            f"{support_text}\n{calendly_url}",
-            parse_mode="HTML",
-        )
-
-        delay_hours = await SettingsService.get_int(session, key="dozhim_after_doubt_hours", default=3)
-        session.add(
-            ScheduledTask(
-                user_id=user.id,
-                task_type="start_funnel",
-                payload={"funnel_name": "dozhim"},
-                run_at=datetime.now(timezone.utc) + timedelta(hours=delay_hours),
-                status=ScheduledTaskStatus.pending,
-            )
-        )
-        await session.commit()
-
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("community:track:"))
-async def community_track_handler(callback: CallbackQuery) -> None:
-    if callback.from_user is None:
-        return
-
-    data = callback.data or ""
-    try:
-        track_id = int(data.split(":")[-1])
-    except ValueError:
-        await callback.answer("Некорректный трек")
-        return
-
-    async with SessionLocal() as session:
-        user_result = await session.execute(select(User).where(User.telegram_id == callback.from_user.id))
-        user = user_result.scalar_one_or_none()
-        if user is None:
-            await callback.answer("Сначала используйте /start")
+        config = StepConfig.model_validate(step.config or {})
+        button_group = next((block for block in config.blocks if isinstance(block, ButtonGroup)), None)
+        if button_group is None:
+            await callback.answer("Кнопка недоступна", show_alert=True)
             return
 
-        await _track_callback_click(session, user.id, data)
-
-        track_result = await session.execute(select(CommunityTrack).where(CommunityTrack.id == track_id))
-        track = track_result.scalar_one_or_none()
-        if track is None:
-            await callback.answer("Трек не найден")
+        button = next((item for item in button_group.buttons if item.id.hex.startswith(button_prefix)), None)
+        if button is None:
+            await callback.answer("Кнопка устарела", show_alert=True)
             return
 
-        for item in track.messages_payload:
-            text = str(item.get("text", ""))
-            if text:
-                await callback.message.answer(text, parse_mode="HTML")
-
-    await callback.answer()
-
-
-@router.callback_query(F.data == "community:choose_track")
-async def community_choose_track_handler(callback: CallbackQuery) -> None:
-    if callback.from_user is None:
-        return
-
-    async with SessionLocal() as session:
-        tracks_result = await session.execute(select(CommunityTrack).order_by(CommunityTrack.id.asc()))
-        tracks = list(tracks_result.scalars().all())
-        if not tracks:
-            await callback.answer("Треки пока не настроены")
+        user_tags = await get_user_tags(session, user.telegram_id)
+        if not check_visibility(button.visible_if, user_tags):
+            await callback.answer("Кнопка недоступна", show_alert=True)
             return
 
-        rows = [
-            [InlineKeyboardButton(text=track.title, callback_data=f"community:track:{track.id}")]
-            for track in tracks
-        ]
-        await callback.message.answer(
-            "Выберите карьерный трек:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-        )
-
-    await callback.answer()
+        await callback.answer()
+        await engine.handle_button_click(user, step, button.id, callback.data)

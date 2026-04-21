@@ -17,7 +17,7 @@ class TagService:
     @staticmethod
     async def has_tag(session: AsyncSession, user_id: int, tag: str) -> bool:
         result = await session.execute(
-            select(UserTag.id).where(UserTag.user_id == user_id, UserTag.tag == tag)
+            select(UserTag.tag).where(UserTag.user_id == user_id, UserTag.tag == tag)
         )
         return result.scalar_one_or_none() is not None
 

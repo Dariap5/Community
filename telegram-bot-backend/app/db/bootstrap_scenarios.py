@@ -2,12 +2,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
-    ButtonType,
     Funnel,
     FunnelStep,
-    StepButton,
-    StepMessage,
-    StepMessageType,
 )
 
 
