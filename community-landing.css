@@ -168,6 +168,7 @@ nav#siteNav.is-scrolled .nav-logo-img--dark {
 
 .nav-cta {
     flex-shrink: 0;
+    text-decoration: none;
     background: var(--btn);
     color: #fff;
     border: none;
@@ -215,6 +216,7 @@ nav#siteNav.is-scrolled .nav-logo-img--dark {
 
 .hero-tag {
     display: inline-flex;
+    text-decoration: none;
     align-items: center;
     gap: 6px;
     padding: 7px 14px 8px;
@@ -284,6 +286,7 @@ button.hero-tag {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    text-decoration: none;
     background: var(--btn);
     color: #fff;
     border: none;
@@ -306,6 +309,7 @@ button.hero-tag {
 }
 
 .btn-p {
+    text-decoration: none;
     background: var(--btn);
     color: #fff;
     border: none;
