@@ -323,6 +323,29 @@ button.hero-tag {
     box-shadow: var(--shadow-sm);
 }
 
+.nav-cta:link,
+.nav-cta:visited,
+.nav-cta:hover,
+.nav-cta:focus,
+.nav-cta:active,
+.hero-tag:link,
+.hero-tag:visited,
+.hero-tag:hover,
+.hero-tag:focus,
+.hero-tag:active,
+.btn-hero:link,
+.btn-hero:visited,
+.btn-hero:hover,
+.btn-hero:focus,
+.btn-hero:active,
+.btn-p:link,
+.btn-p:visited,
+.btn-p:hover,
+.btn-p:focus,
+.btn-p:active {
+    text-decoration: none !important;
+}
+
 .btn-p:hover {
     transform: translateY(-1px);
     opacity: .9;
